@@ -1,0 +1,752 @@
+/*
+Theme Name: Marity Child
+Theme URI: https://marity.qodeinteractive.com
+Description: A child theme of Marity
+Author: Select Themes
+Author URI: https://qodeinteractive.com
+Version: 1.0
+Text Domain: marity
+Template: marity
+*/
+
+/* ==========================================================================
+   Research Post Card - Design A: Elevated Info Card
+   Targets all portfolio single pages (.single-portfolio-item)
+   ========================================================================== */
+
+/* --- Featured image (after description text, inside description column) --- */
+.single-portfolio-item .qodef-research-featured-image {
+	margin-top: 28px;
+	border-radius: 8px;
+	overflow: hidden;
+	line-height: 0;
+	max-height: 360px;
+}
+
+.single-portfolio-item .qodef-research-featured-image img {
+	width: 100%;
+	height: 360px;
+	display: block;
+	border-radius: 8px;
+	object-fit: cover;
+}
+
+/* --- Sidebar: Elevated Info Card --- */
+.single-portfolio-item .qodef-portfolio-single .qodef-additional-info {
+	background: #f8f9fa;
+	border-radius: 10px;
+	padding: 28px 24px !important;
+	border-left: none !important;
+	box-shadow: 0 1px 8px rgba(0, 0, 0, 0.06);
+	width: 300px !important;
+	flex-shrink: 0;
+}
+
+@media only screen and (max-width: 1024px) {
+	.single-portfolio-item .qodef-portfolio-single .qodef-additional-info {
+		width: 100% !important;
+		margin-top: 24px;
+	}
+}
+
+/* Info rows inside card */
+.single-portfolio-item .qodef-portfolio-single .qodef-additional-info > .qodef-e {
+	flex-direction: column !important;
+	padding-bottom: 18px;
+	margin-bottom: 18px !important;
+	border-bottom: 1px solid #e2e5e8;
+}
+
+.single-portfolio-item .qodef-portfolio-single .qodef-additional-info > .qodef-e:last-child {
+	border-bottom: none;
+	padding-bottom: 0;
+	margin-bottom: 0 !important;
+}
+
+/* --- Labels inside card --- */
+.single-portfolio-item .qodef-portfolio-single .qodef-additional-info .qodef-e-label {
+	font-size: 10px !important;
+	font-weight: 600 !important;
+	letter-spacing: 1.5px !important;
+	text-transform: uppercase !important;
+	color: #999 !important;
+	margin-bottom: 8px;
+}
+
+/* --- Article Link: styled as a button --- */
+.single-portfolio-item .qodef-portfolio-single .qodef-info--info-items a.qodef--link {
+	display: inline-flex !important;
+	align-items: center;
+	gap: 8px;
+	background: #0e202a;
+	color: #fff !important;
+	font-family: "Sora", sans-serif;
+	font-size: 13px !important;
+	font-weight: 500 !important;
+	padding: 12px 22px;
+	border-radius: 6px;
+	text-decoration: none !important;
+	text-transform: none !important;
+	letter-spacing: 0 !important;
+	margin-left: 0 !important;
+	margin-top: 2px;
+	transition: background 0.25s ease, transform 0.2s ease;
+	line-height: 1.2 !important;
+}
+
+.single-portfolio-item .qodef-portfolio-single .qodef-info--info-items a.qodef--link:hover {
+	background: #1e3a5f;
+	color: #fff !important;
+	transform: translateY(-1px);
+}
+
+/* Arrow icon appended via CSS pseudo-element */
+.single-portfolio-item .qodef-portfolio-single .qodef-info--info-items a.qodef--link::after {
+	content: "\2192";
+	font-size: 16px;
+	line-height: 1;
+	transition: transform 0.2s ease;
+}
+
+.single-portfolio-item .qodef-portfolio-single .qodef-info--info-items a.qodef--link:hover::after {
+	transform: translateX(3px);
+}
+
+/* Non-link info items (Authors, Published In) */
+.single-portfolio-item .qodef-portfolio-single .qodef-info--info-items .qodef-e-info-item:not(.qodef--link) {
+	font-size: 13px !important;
+	font-weight: 500 !important;
+	color: #0e202a !important;
+	margin-left: 0 !important;
+	text-transform: none !important;
+	line-height: 1.5 !important;
+}
+
+/* --- Date styling --- */
+.single-portfolio-item .qodef-portfolio-single .qodef-info--date .entry-date {
+	font-size: 14px !important;
+	font-weight: 500 !important;
+	color: #0e202a !important;
+	margin-left: 0 !important;
+	text-transform: none !important;
+}
+
+/* --- Category badge inside card --- */
+.single-portfolio-item .qodef-portfolio-single .qodef-additional-info .qodef-e-category {
+	margin-left: 0 !important;
+	margin-top: 4px;
+}
+
+.single-portfolio-item .qodef-portfolio-single .qodef-additional-info .qodef-e-category a {
+	font-weight: 500;
+	padding: 8px 14px;
+	border-radius: 5px;
+}
+
+/* --- Description typography --- */
+.single-portfolio-item .qodef-portfolio-single .qodef-portfolio-description {
+	font-size: 15px;
+	line-height: 1.75 !important;
+	color: #444;
+}
+
+.single-portfolio-item .qodef-portfolio-single .qodef-portfolio-description p {
+	margin-bottom: 1em;
+}
+
+.single-portfolio-item .qodef-portfolio-single .qodef-portfolio-description p:last-child {
+	margin-bottom: 0;
+}
+
+.single-portfolio-item .qodef-portfolio-single .qodef-portfolio-description strong {
+	font-weight: 600;
+	color: #0e202a;
+}
+
+/* --- Description holder: give more room --- */
+.single-portfolio-item .qodef-portfolio-single .qodef-portfolio-info .qodef-e-description-holder {
+	flex: 1;
+	width: auto !important;
+	padding-right: 48px;
+}
+
+@media only screen and (max-width: 1024px) {
+	.single-portfolio-item .qodef-portfolio-single .qodef-portfolio-info .qodef-e-description-holder {
+		padding-right: 0;
+	}
+}
+
+/* ==========================================================================
+   Team Page - Design C: Magazine Feature Cards
+   Targets the Our Team page (.page-id-6575) team-list shortcode
+   ========================================================================== */
+
+/* --- Override grid: 2-column CSS grid layout --- */
+.page-id-6575 .qodef-team-list article.portfolio-item {
+	display: grid !important;
+	grid-template-columns: 1fr 1fr !important;
+	gap: 28px !important;
+}
+
+/* Remove theme's default width/padding on grid items */
+.page-id-6575 .qodef-team-list .qodef-e.qodef-grid-item {
+	width: 100% !important;
+	max-width: 100% !important;
+	padding: 0 !important;
+	margin: 0 !important;
+}
+
+/* --- Featured card (director): full-width row --- */
+.page-id-6575 .qodef-team-list article.portfolio-item > .qodef-e:first-child {
+	grid-column: 1 / -1;
+}
+
+/* --- Card: horizontal landscape layout --- */
+.page-id-6575 .qodef-team-list .qodef-e-inner {
+	display: flex !important;
+	flex-direction: row !important;
+	background: #fff;
+	border-radius: 14px;
+	overflow: hidden;
+	box-shadow: 0 2px 16px rgba(0, 0, 0, 0.07);
+	transition: transform 0.3s ease, box-shadow 0.3s ease;
+	height: 100%;
+}
+
+.page-id-6575 .qodef-team-list .qodef-e-inner:hover {
+	transform: translateY(-4px);
+	box-shadow: 0 10px 32px rgba(0, 0, 0, 0.13);
+}
+
+/* --- Image section --- */
+.page-id-6575 .qodef-team-list .qodef-e-image {
+	width: 220px;
+	min-height: 280px;
+	flex-shrink: 0;
+	position: relative;
+	overflow: hidden;
+}
+
+/* Featured (director) image is larger */
+.page-id-6575 .qodef-team-list article.portfolio-item > .qodef-e:first-child .qodef-e-image {
+	width: 340px;
+	min-height: 360px;
+}
+
+.page-id-6575 .qodef-team-list .qodef-e-media-image {
+	height: 100%;
+}
+
+.page-id-6575 .qodef-team-list .qodef-e-media-image img {
+	width: 100% !important;
+	height: 100% !important;
+	object-fit: cover !important;
+	display: block;
+}
+
+/* --- Social icons: gradient overlay at bottom of image --- */
+.page-id-6575 .qodef-team-list .qodef-social-icon {
+	position: absolute;
+	bottom: 0;
+	left: 0;
+	right: 0;
+	display: flex !important;
+	gap: 10px;
+	padding: 16px;
+	background: linear-gradient(transparent, rgba(0, 0, 0, 0.55));
+	justify-content: flex-start;
+}
+
+.page-id-6575 .qodef-team-list .qodef-team-member-social-icon {
+	color: #fff !important;
+	font-size: 16px !important;
+	transition: transform 0.2s ease;
+}
+
+.page-id-6575 .qodef-team-list .qodef-team-member-social-icon:hover {
+	transform: scale(1.15);
+}
+
+/* --- Content section --- */
+.page-id-6575 .qodef-team-list .qodef-e-content {
+	flex: 1;
+	display: flex !important;
+	flex-direction: column !important;
+	justify-content: center !important;
+	padding: 32px 36px !important;
+}
+
+/* --- Name / title --- */
+.page-id-6575 .qodef-team-list .qodef-e-title {
+	font-size: 20px !important;
+	font-weight: 700 !important;
+	color: #0e202a !important;
+	margin-bottom: 8px !important;
+	line-height: 1.3 !important;
+}
+
+/* Director name bigger */
+.page-id-6575 .qodef-team-list article.portfolio-item > .qodef-e:first-child .qodef-e-title {
+	font-size: 28px !important;
+	margin-bottom: 12px !important;
+}
+
+/* --- Role text --- */
+.page-id-6575 .qodef-team-list .qodef-e-role {
+	font-size: 13px !important;
+	font-weight: 500 !important;
+	text-transform: uppercase !important;
+	letter-spacing: 1.5px !important;
+	color: #6c757d !important;
+}
+
+/* Director role: styled as badge */
+.page-id-6575 .qodef-team-list article.portfolio-item > .qodef-e:first-child .qodef-e-role {
+	display: inline-block;
+	background: #0e202a;
+	color: #fff !important;
+	padding: 5px 14px;
+	border-radius: 4px;
+	font-size: 11px !important;
+	letter-spacing: 2px !important;
+	width: fit-content;
+}
+
+/* --- Responsive: stack on small screens --- */
+@media only screen and (max-width: 768px) {
+	.page-id-6575 .qodef-team-list article.portfolio-item {
+		grid-template-columns: 1fr !important;
+	}
+
+	.page-id-6575 .qodef-team-list .qodef-e-inner {
+		flex-direction: column !important;
+	}
+
+	.page-id-6575 .qodef-team-list .qodef-e-image,
+	.page-id-6575 .qodef-team-list article.portfolio-item > .qodef-e:first-child .qodef-e-image {
+		width: 100% !important;
+		min-height: 300px;
+	}
+}
+
+@media only screen and (min-width: 769px) and (max-width: 1024px) {
+	.page-id-6575 .qodef-team-list .qodef-e-image {
+		width: 180px;
+		min-height: 240px;
+	}
+
+	.page-id-6575 .qodef-team-list article.portfolio-item > .qodef-e:first-child .qodef-e-image {
+		width: 260px;
+	}
+
+	.page-id-6575 .qodef-team-list .qodef-e-content {
+		padding: 24px !important;
+	}
+}
+
+/* ==========================================================================
+   Team Bios - Option D: Interactive Sidebar Navigation
+   Replaces the Elementor accordion on the Our Team page (.page-id-6575)
+   ========================================================================== */
+
+/* --- Container --- */
+.aimes-bio-sidebar {
+	display: flex;
+	border-radius: 14px;
+	overflow: hidden;
+	border: 1px solid #e2e5e8;
+	min-height: 460px;
+	box-shadow: 0 2px 16px rgba(0, 0, 0, 0.06);
+}
+
+/* --- Left navigation panel --- */
+.aimes-bio-nav {
+	width: 260px;
+	flex-shrink: 0;
+	background: #0e202a;
+	display: flex;
+	flex-direction: column;
+}
+
+.aimes-bio-btn {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+	padding: 18px 22px;
+	border: none;
+	background: transparent;
+	cursor: pointer;
+	font-family: "Sora", sans-serif;
+	text-align: left;
+	transition: background 0.2s ease;
+	border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.aimes-bio-btn:last-child {
+	border-bottom: none;
+}
+
+.aimes-bio-btn:hover {
+	background: rgba(255, 255, 255, 0.06);
+}
+
+.aimes-bio-btn.active {
+	background: rgba(255, 255, 255, 0.12);
+}
+
+.aimes-bio-btn img {
+	width: 44px;
+	height: 44px;
+	border-radius: 50%;
+	object-fit: cover;
+	flex-shrink: 0;
+	border: 2px solid rgba(255, 255, 255, 0.15);
+}
+
+.aimes-bio-btn.active img {
+	border-color: rgba(255, 255, 255, 0.5);
+}
+
+.aimes-bio-btn-name {
+	font-size: 14px;
+	font-weight: 600;
+	color: #fff;
+	line-height: 1.3;
+}
+
+.aimes-bio-btn-role {
+	font-size: 10px;
+	color: rgba(255, 255, 255, 0.45);
+	text-transform: uppercase;
+	letter-spacing: 1.2px;
+	margin-top: 2px;
+}
+
+/* --- Right content panel --- */
+.aimes-bio-content {
+	flex: 1;
+	padding: 40px 44px;
+	background: #fff;
+	overflow-y: auto;
+}
+
+.aimes-bio-panel-name {
+	font-size: 24px;
+	font-weight: 700;
+	color: #0e202a;
+	margin-bottom: 4px;
+	line-height: 1.3;
+}
+
+.aimes-bio-panel-role {
+	font-size: 11px;
+	font-weight: 600;
+	letter-spacing: 2px;
+	text-transform: uppercase;
+	color: #6c757d;
+	display: block;
+	margin-bottom: 24px;
+}
+
+.aimes-bio-panel-text {
+	font-size: 14px;
+	line-height: 1.85;
+	color: #444;
+}
+
+.aimes-bio-panel-text p {
+	margin-bottom: 0.9em;
+}
+
+.aimes-bio-panel-text p:last-child {
+	margin-bottom: 0;
+}
+
+.aimes-bio-panel-text a {
+	color: #1a6bb5;
+	text-decoration: none;
+}
+
+.aimes-bio-panel-text a:hover {
+	text-decoration: underline;
+}
+
+.aimes-bio-panel-text em,
+.aimes-bio-panel-text i {
+	font-style: italic;
+}
+
+.aimes-bio-panel-empty {
+	font-size: 14px;
+	color: #aaa;
+	font-style: italic;
+	margin-top: 24px;
+}
+
+/* --- Responsive: stack on small screens --- */
+@media only screen and (max-width: 768px) {
+	.aimes-bio-sidebar {
+		flex-direction: column;
+		min-height: auto;
+	}
+
+	.aimes-bio-nav {
+		width: 100%;
+		flex-direction: row;
+		overflow-x: auto;
+		-webkit-overflow-scrolling: touch;
+	}
+
+	.aimes-bio-btn {
+		flex-direction: column;
+		align-items: center;
+		gap: 6px;
+		padding: 14px 16px;
+		min-width: 100px;
+		text-align: center;
+		border-bottom: none;
+		border-right: 1px solid rgba(255, 255, 255, 0.07);
+	}
+
+	.aimes-bio-btn:last-child {
+		border-right: none;
+	}
+
+	.aimes-bio-btn-name {
+		font-size: 12px;
+	}
+
+	.aimes-bio-btn-role {
+		font-size: 9px;
+	}
+
+	.aimes-bio-content {
+		padding: 24px 20px;
+	}
+}
+
+/* ==========================================================================
+   News Band – Homepage (Option 1+3, Color 3: Slate Blue)
+   Injected after hero section
+   ========================================================================== */
+
+.aimes-news-band {
+	background: #1e3a5f;
+	color: #fff;
+	overflow: hidden;
+	position: relative;
+	display: flex;
+	align-items: center;
+}
+
+.aimes-news-band a {
+	color: inherit;
+	text-decoration: none;
+}
+
+.aimes-news-band a:hover {
+	text-decoration: underline;
+}
+
+.aimes-news-band-inner {
+	flex: 1;
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 7px 24px;
+	min-height: 34px;
+	width: 100%;
+}
+
+.aimes-news-band-badge {
+	font-size: 9px;
+	font-weight: 700;
+	letter-spacing: 1.5px;
+	padding: 3px 10px;
+	border-radius: 4px;
+	background: #60a5fa;
+	color: #fff;
+	flex-shrink: 0;
+}
+
+.aimes-news-band-icon {
+	width: 24px;
+	height: 24px;
+	flex-shrink: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.aimes-news-band-icon svg {
+	width: 16px;
+	height: 16px;
+	opacity: 0.9;
+}
+
+.aimes-news-band-ticker-wrap {
+	overflow: hidden;
+	flex: 1;
+}
+
+.aimes-news-band-ticker {
+	display: flex;
+	animation: aimes-ticker-scroll 18s linear infinite;
+}
+
+@keyframes aimes-ticker-scroll {
+	0% { transform: translateX(0); }
+	100% { transform: translateX(-50%); }
+}
+
+.aimes-news-band-ticker span {
+	white-space: nowrap;
+	padding-right: 40px;
+	font-size: 13px;
+	font-weight: 500;
+}
+
+.aimes-news-band-cta {
+	font-size: 12px;
+	font-weight: 600;
+	padding: 0 16px;
+	flex-shrink: 0;
+	white-space: nowrap;
+}
+
+/* --- Hide portfolio media (top image) on single portfolio pages --- */
+.single-portfolio-item .qodef-media {
+	display: none !important;
+}
+
+/* ==========================================================================
+   Homepage Hero — A1 Pebble Mask + Gradient Button + Particles
+   Targets page-id-479 (homepage) Elementor hero section
+   ========================================================================== */
+
+/* --- Remove existing PNG blob mask, apply pebble border-radius --- */
+.elementor-479 .elementor-element.elementor-element-cb6731e .elementor-widget-container img {
+	-webkit-mask-image: none !important;
+	mask-image: none !important;
+	border-radius: 60% 40% 45% 55% / 50% 55% 45% 50% !important;
+	box-shadow: 0 8px 40px rgba(0, 0, 0, 0.12);
+	position: relative;
+	z-index: 1;
+}
+
+/* --- Reduce pebble size (~3-4cm smaller) --- */
+.elementor-479 .elementor-element.elementor-element-cb6731e {
+	width: 62% !important;
+	max-width: 62% !important;
+}
+
+/* --- Widget container: kill the blob mask + allow overflow for backdrop --- */
+.elementor-479 .elementor-element.elementor-element-cb6731e .elementor-widget-container,
+.elementor-479 .elementor-element.elementor-element-cb6731e:not(.elementor-widget-image) .elementor-widget-container {
+	-webkit-mask-image: none !important;
+	mask-image: none !important;
+	-webkit-mask-size: unset !important;
+	mask-size: unset !important;
+	position: relative !important;
+	overflow: visible !important;
+}
+
+/* --- Pastel gradient backdrop (offset behind pebble) --- */
+.elementor-479 .elementor-element.elementor-element-cb6731e .elementor-widget-container::before {
+	content: '';
+	position: absolute;
+	top: -14px;
+	right: -14px;
+	width: 100%;
+	height: 100%;
+	border-radius: 60% 40% 45% 55% / 50% 55% 45% 50%;
+	background: linear-gradient(135deg, #dbeafe 0%, #e0e7ff 100%);
+	z-index: 0;
+}
+
+/* --- Dot grid accent below pebble --- */
+.elementor-479 .elementor-element.elementor-element-cb6731e .elementor-widget-container::after {
+	content: '';
+	position: absolute;
+	bottom: -24px;
+	left: 40px;
+	width: 56px;
+	height: 56px;
+	background: radial-gradient(circle, #1e3a5f 2px, transparent 2px);
+	background-size: 12px 12px;
+	z-index: 2;
+	opacity: 0.3;
+}
+
+/* --- Hero CTA button: gradient using site palette --- */
+.elementor-479 .elementor-element.elementor-element-c19954e a[data-hover-background-color] {
+	background: linear-gradient(135deg, #0e202a 0%, #1e3a5f 100%) !important;
+	color: #fff !important;
+	border: none !important;
+	border-color: transparent !important;
+	padding: 14px 34px !important;
+	box-shadow: 0 4px 16px rgba(14, 32, 42, 0.25);
+	transition: all 0.35s ease !important;
+}
+
+/* --- Reduce hero bottom padding so news band fits in landing view --- */
+.elementor-479 .elementor-element.elementor-element-e0101e2 {
+	padding-bottom: 30px !important;
+}
+
+/* --- Pull news band snug under hero --- */
+.aimes-news-band {
+	margin-top: -10px;
+}
+
+/* --- Particles canvas container --- */
+#aimes-hero-particles {
+	position: absolute;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: 100%;
+	z-index: 0;
+	pointer-events: none;
+}
+
+#aimes-hero-particles canvas {
+	display: block;
+}
+
+/* Keep hero content above particles */
+.elementor-479 .elementor-element.elementor-element-e0101e2 {
+	position: relative !important;
+}
+
+.elementor-479 .elementor-element.elementor-element-e0101e2 > .elementor-container {
+	position: relative;
+	z-index: 1;
+}
+
+/* --- Responsive: hide dots on mobile --- */
+@media only screen and (max-width: 768px) {
+	.elementor-479 .elementor-element.elementor-element-cb6731e .elementor-widget-container::after {
+		display: none;
+	}
+}
+
+/* ==========================================================================
+   Portfolio Listing Page - Option A: Uniform Grid Cards
+   Cards rebuilt via JS with inline styles. CSS only for responsive.
+   ========================================================================== */
+
+@media only screen and (max-width: 900px) {
+	article.portfolio-item .optionA-img {
+		height: 200px !important;
+	}
+}
+
+@media only screen and (max-width: 600px) {
+	article.portfolio-item .optionA-img {
+		height: 180px !important;
+	}
+	article.portfolio-item .optionA-body {
+		padding: 18px 18px 22px !important;
+	}
+}

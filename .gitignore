@@ -1,0 +1,17 @@
+/*
+
+# --- Allow documentation ---
+!.gitignore
+!README.md
+!CONTENT-MANAGEMENT-GUIDE.md
+
+# --- Allow child theme path ---
+!app/
+app/*
+!app/public/
+app/public/*
+!app/public/wp-content/
+app/public/wp-content/*
+!app/public/wp-content/themes/
+app/public/wp-content/themes/*
+!app/public/wp-content/themes/marity-child/
