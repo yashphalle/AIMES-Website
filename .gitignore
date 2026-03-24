@@ -4,6 +4,9 @@
 !.gitignore
 !README.md
 !CONTENT-MANAGEMENT-GUIDE.md
+!TEAMS-POST-SETUP.md
+!WP-ADMIN-EDITABILITY-AUDIT.md
+!doc/
 
 # --- Allow child theme path ---
 !app/
