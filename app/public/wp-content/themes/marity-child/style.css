@@ -1728,19 +1728,28 @@ Template: marity
 	overflow: hidden;
 }
 
-/* View more link */
+/* View more button */
 .aimes-talk-btn-view {
-	display: inline-block;
-	font-size: 13px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	padding: 10px 20px;
+	border-radius: 8px;
+	font-size: 12px;
 	font-weight: 600;
-	color: #dde3ec;
 	text-decoration: none;
+	background: linear-gradient(135deg, #0e202a 0%, #1e3a5f 100%);
+	color: #fff;
 	margin-top: auto;
 	width: fit-content;
+	transition: transform 0.2s, box-shadow 0.2s;
 }
 
 .aimes-talk-btn-view:hover {
-	text-decoration: underline;
+	transform: translateY(-2px);
+	box-shadow: 0 6px 20px rgba(14, 32, 42, 0.25);
+	color: #fff;
+	text-decoration: none;
 }
 
 /* Card primary/outline buttons (Register, Join Virtual) */
@@ -2629,4 +2638,202 @@ Template: marity
 	.aimes-course-card-visual {
 		height: 140px;
 	}
+}
+
+/* ================================================
+   Talk Detail Page (/talks/{slug}/)
+   ================================================ */
+
+.aimes-talk-detail {
+	padding: 56px 0 80px;
+	background: #fff;
+	min-height: 60vh;
+}
+
+.aimes-talk-detail-inner {
+	max-width: 960px;
+	margin: 0 auto;
+	padding: 0 24px;
+}
+
+.aimes-talk-detail-back {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	color: #1e3a5f;
+	font-size: 14px;
+	font-weight: 600;
+	text-decoration: none;
+	margin-bottom: 32px;
+}
+
+.aimes-talk-detail-back:hover {
+	text-decoration: underline;
+}
+
+.aimes-talk-detail-hero {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 52px;
+	align-items: start;
+	margin-bottom: 52px;
+}
+
+.aimes-talk-detail-thumb {
+	border-radius: 12px;
+	overflow: hidden;
+	aspect-ratio: 4 / 3;
+	background: #f0f4f8;
+}
+
+.aimes-talk-detail-thumb img {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	display: block;
+}
+
+.aimes-talk-detail-badge {
+	display: inline-block;
+	font-size: 11px;
+	font-weight: 700;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	padding: 4px 12px;
+	border-radius: 20px;
+	margin-bottom: 16px;
+}
+
+.aimes-talk-detail-badge--upcoming {
+	background: #e8f0fe;
+	color: #1e3a5f;
+}
+
+.aimes-talk-detail-badge--past {
+	background: #f0f0f0;
+	color: #666;
+}
+
+.aimes-talk-detail-title {
+	font-size: 30px;
+	font-weight: 800;
+	color: #0e202a;
+	line-height: 1.2;
+	margin: 0 0 14px;
+}
+
+.aimes-talk-detail-speaker {
+	font-size: 16px;
+	font-weight: 700;
+	color: #1e3a5f;
+	margin-bottom: 4px;
+}
+
+.aimes-talk-detail-bio {
+	font-size: 14px;
+	color: #666;
+	margin-bottom: 20px;
+}
+
+.aimes-talk-detail-meta {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	margin-bottom: 28px;
+}
+
+.aimes-talk-detail-meta-item {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	font-size: 14px;
+	color: #444;
+}
+
+.aimes-talk-detail-meta-item svg {
+	flex-shrink: 0;
+	color: #1e3a5f;
+}
+
+.aimes-talk-detail-actions {
+	display: flex;
+	gap: 12px;
+	flex-wrap: wrap;
+}
+
+.aimes-talk-detail-content {
+	border-top: 1px solid #e5e7eb;
+	padding-top: 40px;
+	font-size: 16px;
+	color: #333;
+	line-height: 1.8;
+}
+
+.aimes-talk-detail-content p {
+	margin-bottom: 20px;
+}
+
+/* Recording section */
+.aimes-talk-detail-recording {
+	border-top: 1px solid #e5e7eb;
+	margin-top: 36px;
+	padding-top: 28px;
+}
+
+.aimes-talk-detail-recording-label {
+	font-size: 13px;
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+	color: #888;
+	margin: 0 0 14px;
+}
+
+.aimes-talk-detail-recording-btn {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	padding: 11px 22px;
+	background: linear-gradient(135deg, #0e202a 0%, #1e3a5f 100%);
+	color: #fff;
+	font-size: 14px;
+	font-weight: 600;
+	text-decoration: none;
+	border-radius: 8px;
+	transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.aimes-talk-detail-recording-btn:hover {
+	transform: translateY(-2px);
+	box-shadow: 0 6px 20px rgba(14, 32, 42, 0.25);
+	color: #fff;
+}
+
+.aimes-talk-detail-recording-unavailable {
+	display: inline-flex;
+	align-items: center;
+	gap: 7px;
+	font-size: 14px;
+	color: #999;
+	font-style: italic;
+}
+
+@media (max-width: 720px) {
+	.aimes-talk-detail-hero {
+		grid-template-columns: 1fr;
+		gap: 28px;
+	}
+
+	.aimes-talk-detail-title {
+		font-size: 22px;
+	}
+}
+
+/* ==========================================================================
+   Articles — hide author byline ("Written by [Name]")
+   ========================================================================== */
+.qodef-e-author-label,
+.qodef-e-info-author,
+.qodef-info-separator-end {
+	display: none !important;
 }

@@ -207,6 +207,7 @@ if ( ! function_exists( 'marity_child_talk_cpt_meta_box' ) ) {
 			'_aimes_talk_location'    => array( 'label' => 'Location / Room',          'type' => 'text' ),
 			'_aimes_talk_virtual_url' => array( 'label' => 'Virtual/Zoom Link',        'type' => 'url' ),
 			'_aimes_talk_register'    => array( 'label' => 'Registration URL',         'type' => 'url' ),
+			'_aimes_talk_recording'   => array( 'label' => 'Recording URL (YouTube/Vimeo — add after talk)', 'type' => 'url' ),
 			'_aimes_talk_thumb'       => array( 'label' => 'Speaker Photo URL (or use Featured Image)', 'type' => 'url' ),
 		);
 		echo '<table class="form-table">';
@@ -232,7 +233,7 @@ if ( ! function_exists( 'marity_child_talk_cpt_meta_box' ) ) {
 				update_post_meta( $post_id, $key, sanitize_text_field( $_POST[ $key ] ) );
 			}
 		}
-		$url_keys = array( '_aimes_talk_virtual_url', '_aimes_talk_register', '_aimes_talk_thumb' );
+		$url_keys = array( '_aimes_talk_virtual_url', '_aimes_talk_register', '_aimes_talk_recording', '_aimes_talk_thumb' );
 		foreach ( $url_keys as $key ) {
 			if ( isset( $_POST[ $key ] ) ) {
 				update_post_meta( $post_id, $key, esc_url_raw( $_POST[ $key ] ) );
@@ -884,6 +885,7 @@ add_action( 'init', 'marity_child_talks_rewrite' );
  */
 function marity_child_talks_query_var( $vars ) {
 	$vars[] = 'aimes_talks_page';
+	$vars[] = 'talk_id';
 	return $vars;
 }
 add_filter( 'query_vars', 'marity_child_talks_query_var' );
@@ -928,13 +930,15 @@ function marity_child_set_virtual_page_post( $title = 'Page' ) {
  * Handle /talks/ virtual page
  */
 function marity_child_talks_template_redirect() {
-	if ( get_query_var( 'aimes_talks_page' ) || strpos( $_SERVER['REQUEST_URI'], '/talks' ) !== false && strpos( $_SERVER['REQUEST_URI'], '/talk-preview' ) === false ) {
+	$talk_id_qv = absint( get_query_var( 'talk_id' ) );
+	$is_talks   = $talk_id_qv || get_query_var( 'aimes_talks_page' ) || ( strpos( $_SERVER['REQUEST_URI'], '/talks' ) !== false && strpos( $_SERVER['REQUEST_URI'], '/talk-preview' ) === false );
+	if ( $is_talks ) {
 		global $wp_query;
 		$wp_query->is_page     = true;
 		$wp_query->is_singular = true;
 		$wp_query->is_home     = false;
 		$wp_query->is_archive  = false;
-		marity_child_set_virtual_page_post( 'Talks & Seminars' );
+		marity_child_set_virtual_page_post( $talk_id_qv ? 'Talk' : 'Talks & Seminars' );
 		$template = get_stylesheet_directory() . '/talk-preview.php';
 		if ( ! file_exists( $template ) ) {
 			wp_die( 'Talks template not found. Ensure talk-preview.php is in the child theme folder on this server.', 'Template missing', array( 'response' => 500 ) );
@@ -977,7 +981,7 @@ function marity_child_homepage_talks_section() {
 		}
 		$item = array(
 			'id'          => $t->ID,
-			'permalink'   => get_permalink( $t->ID ),
+			'permalink'   => add_query_arg( 'talk_id', $t->ID, home_url( '/talks/' ) ),
 			'title'       => get_the_title( $t->ID ),
 			'speaker'     => get_post_meta( $t->ID, '_aimes_talk_speaker', true ),
 			'speaker_bio' => get_post_meta( $t->ID, '_aimes_talk_speaker_bio', true ),
@@ -1104,7 +1108,8 @@ function marity_child_homepage_talks_section() {
 							<?php if ( ! empty( $talk['virtual_url'] ) ) : ?>
 								<a href="<?php echo esc_url( $talk['virtual_url'] ); ?>" class="aimes-talk-card-btn aimes-talk-btn-outline">Join Virtual</a>
 							<?php endif; ?>
-							</div>
+						</div>
+						<a href="<?php echo esc_url( $talk['permalink'] ); ?>" class="aimes-talk-card-btn aimes-talk-btn-view">View more</a>
 					</div>
 				</article>
 				<?php endforeach; ?>
@@ -1656,13 +1661,14 @@ add_action( 'template_redirect', 'marity_child_courses_designs_template_redirect
  * Frontend is unaffected. Fully reversible by removing lines.
  */
 function marity_child_remove_admin_menu_items() {
-	global $menu;
+	global $menu, $submenu;
 
-	// --- Rename: strip "Marity" prefix from CPT labels ---
+	// --- Rename top-level menu items ---
 	$renames = array(
-		'edit.php?post_type=portfolio-item' => 'Portfolio',
+		'edit.php?post_type=portfolio-item' => 'Research Posts',
 		'edit.php?post_type=clients'        => 'Clients',
 		'edit.php?post_type=team'           => 'Team',
+		'edit.php'                          => 'Articles',
 	);
 
 	foreach ( $menu as $key => $item ) {
@@ -1672,14 +1678,359 @@ function marity_child_remove_admin_menu_items() {
 		}
 	}
 
+	// --- Rename submenus ---
+
+	// Portfolio → Research Posts submenus
+	$portfolio_slug = 'edit.php?post_type=portfolio-item';
+	if ( isset( $submenu[ $portfolio_slug ] ) ) {
+		foreach ( $submenu[ $portfolio_slug ] as $k => $sub ) {
+			if ( stripos( $sub[0], 'portfolio' ) !== false ) {
+				$submenu[ $portfolio_slug ][ $k ][0] = str_ireplace(
+					array( 'Marity Portfolio', 'Portfolio Items', 'Portfolio' ),
+					array( 'Research Posts',   'Research Posts',  'Research Posts' ),
+					$sub[0]
+				);
+			}
+		}
+	}
+
+	// Posts → Articles submenus
+	if ( isset( $submenu['edit.php'] ) ) {
+		foreach ( $submenu['edit.php'] as $k => $sub ) {
+			$submenu['edit.php'][ $k ][0] = str_ireplace(
+				array( 'All Posts', 'Add New Post', 'Posts' ),
+				array( 'All Articles', 'Add New Article', 'Articles' ),
+				$sub[0]
+			);
+		}
+	}
+
 	// --- Hide: unused CPTs (not used anywhere on the AIMES site) ---
 	remove_menu_page( 'edit.php?post_type=masonry-gallery' );
 	remove_menu_page( 'edit.php?post_type=testimonials' );
 	remove_menu_page( 'edit.php?post_type=ditty' );
 	remove_menu_page( 'edit.php?post_type=feedback' );
-
-	// Uncomment to hide additional items if needed:
-	// remove_menu_page( 'edit.php' );                             // Posts
-	// remove_menu_page( 'edit.php?post_type=aimes_announcement' ); // Announcements
 }
 add_action( 'admin_menu', 'marity_child_remove_admin_menu_items', 999 );
+
+// =============================================================================
+// BLOCK 6 — Slack → WordPress: Create Research Posts via Slack Modal
+// Endpoints:
+//   POST /wp-json/aimes/v1/slack/command     — handles /newresearch slash command
+//   POST /wp-json/aimes/v1/slack/interaction — handles modal submission
+// Credentials in wp-config.php:
+//   define('AIMES_SLACK_SIGNING_SECRET', 'xxxx');
+//   define('AIMES_SLACK_BOT_TOKEN',      'xoxb-xxxx');
+// =============================================================================
+
+$aimes_private = get_stylesheet_directory() . '/aimes-private.php';
+if ( file_exists( $aimes_private ) ) {
+	require_once $aimes_private;
+}
+
+add_action( 'rest_api_init', 'aimes_slack_register_routes' );
+function aimes_slack_register_routes() {
+	register_rest_route( 'aimes/v1', '/slack/command', array(
+		'methods'             => 'POST',
+		'callback'            => 'aimes_slack_handle_command',
+		'permission_callback' => '__return_true',
+	) );
+	register_rest_route( 'aimes/v1', '/slack/interaction', array(
+		'methods'             => 'POST',
+		'callback'            => 'aimes_slack_handle_interaction',
+		'permission_callback' => '__return_true',
+	) );
+}
+
+// ---------- Signature verification ----------
+function aimes_slack_verify_signature( WP_REST_Request $request ) {
+	if ( ! defined( 'AIMES_SLACK_SIGNING_SECRET' ) ) {
+		return false;
+	}
+	$timestamp = $request->get_header( 'X-Slack-Request-Timestamp' );
+	$sig_header = $request->get_header( 'X-Slack-Signature' );
+	if ( ! $timestamp || ! $sig_header ) {
+		return false;
+	}
+	// Reject replays older than 5 minutes
+	if ( abs( time() - (int) $timestamp ) > 300 ) {
+		return false;
+	}
+	$body      = $request->get_body();
+	$base_str  = 'v0:' . $timestamp . ':' . $body;
+	$computed  = 'v0=' . hash_hmac( 'sha256', $base_str, AIMES_SLACK_SIGNING_SECRET );
+	return hash_equals( $computed, $sig_header );
+}
+
+// ---------- /newresearch slash command handler ----------
+function aimes_slack_handle_command( WP_REST_Request $request ) {
+	// DEBUG — temporarily skip sig check to confirm endpoint is reachable
+	return new WP_REST_Response( array( 'text' => 'Endpoint hit! Slack ↔ WordPress connected.' ), 200 );
+
+	if ( ! aimes_slack_verify_signature( $request ) ) {
+		return new WP_REST_Response( array( 'error' => 'Invalid signature' ), 403 );
+	}
+
+	$body    = array();
+	parse_str( $request->get_body(), $body );
+	$trigger = $body['trigger_id'] ?? '';
+	if ( ! $trigger ) {
+		return new WP_REST_Response( array( 'text' => 'Missing trigger_id.' ), 200 );
+	}
+
+	// Build category options from portfolio-category taxonomy
+	$cats    = get_terms( array( 'taxonomy' => 'portfolio-category', 'hide_empty' => false ) );
+	$cat_options = array(
+		array( 'text' => array( 'type' => 'plain_text', 'text' => '— Select category —' ), 'value' => '' ),
+	);
+	if ( ! is_wp_error( $cats ) ) {
+		foreach ( $cats as $cat ) {
+			$cat_options[] = array(
+				'text'  => array( 'type' => 'plain_text', 'text' => $cat->name ),
+				'value' => (string) $cat->term_id,
+			);
+		}
+	}
+
+	$modal = array(
+		'trigger_id' => $trigger,
+		'view'       => array(
+			'type'            => 'modal',
+			'callback_id'     => 'aimes_new_research',
+			'title'           => array( 'type' => 'plain_text', 'text' => 'New Research Post' ),
+			'submit'          => array( 'type' => 'plain_text', 'text' => 'Publish' ),
+			'close'           => array( 'type' => 'plain_text', 'text' => 'Cancel' ),
+			'blocks'          => array(
+				// Title
+				array(
+					'type'     => 'input',
+					'block_id' => 'block_title',
+					'label'    => array( 'type' => 'plain_text', 'text' => 'Title *' ),
+					'element'  => array( 'type' => 'plain_text_input', 'action_id' => 'title' ),
+				),
+				// Short Summary
+				array(
+					'type'     => 'input',
+					'block_id' => 'block_summary',
+					'label'    => array( 'type' => 'plain_text', 'text' => 'Short Summary' ),
+					'optional' => true,
+					'element'  => array(
+						'type'      => 'plain_text_input',
+						'action_id' => 'summary',
+						'multiline' => true,
+					),
+				),
+				// Authors
+				array(
+					'type'     => 'input',
+					'block_id' => 'block_authors',
+					'label'    => array( 'type' => 'plain_text', 'text' => 'Authors (comma-separated)' ),
+					'optional' => true,
+					'element'  => array( 'type' => 'plain_text_input', 'action_id' => 'authors' ),
+				),
+				// Journal / Venue
+				array(
+					'type'     => 'input',
+					'block_id' => 'block_journal',
+					'label'    => array( 'type' => 'plain_text', 'text' => 'Journal / Venue' ),
+					'optional' => true,
+					'element'  => array( 'type' => 'plain_text_input', 'action_id' => 'journal' ),
+				),
+				// Year
+				array(
+					'type'     => 'input',
+					'block_id' => 'block_year',
+					'label'    => array( 'type' => 'plain_text', 'text' => 'Year (e.g. 2024)' ),
+					'optional' => true,
+					'element'  => array( 'type' => 'plain_text_input', 'action_id' => 'year' ),
+				),
+				// DOI / External Link
+				array(
+					'type'     => 'input',
+					'block_id' => 'block_doi',
+					'label'    => array( 'type' => 'plain_text', 'text' => 'DOI / External Link URL' ),
+					'optional' => true,
+					'element'  => array( 'type' => 'plain_text_input', 'action_id' => 'doi' ),
+					'hint'     => array( 'type' => 'plain_text', 'text' => 'Full URL, e.g. https://doi.org/10.xxxx/yyyy' ),
+				),
+				// Category dropdown
+				array(
+					'type'     => 'input',
+					'block_id' => 'block_category',
+					'label'    => array( 'type' => 'plain_text', 'text' => 'Category' ),
+					'optional' => true,
+					'element'  => array(
+						'type'      => 'static_select',
+						'action_id' => 'category',
+						'options'   => $cat_options,
+					),
+				),
+				// Tags
+				array(
+					'type'     => 'input',
+					'block_id' => 'block_tags',
+					'label'    => array( 'type' => 'plain_text', 'text' => 'Tags (comma-separated)' ),
+					'optional' => true,
+					'element'  => array( 'type' => 'plain_text_input', 'action_id' => 'tags' ),
+				),
+				// Status
+				array(
+					'type'     => 'input',
+					'block_id' => 'block_status',
+					'label'    => array( 'type' => 'plain_text', 'text' => 'Publish status' ),
+					'element'  => array(
+						'type'           => 'static_select',
+						'action_id'      => 'status',
+						'initial_option' => array(
+							'text'  => array( 'type' => 'plain_text', 'text' => 'Draft (review before publishing)' ),
+							'value' => 'draft',
+						),
+						'options' => array(
+							array( 'text' => array( 'type' => 'plain_text', 'text' => 'Draft (review before publishing)' ), 'value' => 'draft' ),
+							array( 'text' => array( 'type' => 'plain_text', 'text' => 'Publish immediately' ),             'value' => 'publish' ),
+						),
+					),
+				),
+			),
+		),
+	);
+
+	$response = wp_remote_post( 'https://slack.com/api/views.open', array(
+		'headers' => array(
+			'Content-Type'  => 'application/json',
+			'Authorization' => 'Bearer ' . AIMES_SLACK_BOT_TOKEN,
+		),
+		'body'    => wp_json_encode( $modal ),
+		'timeout' => 10,
+	) );
+
+	if ( is_wp_error( $response ) ) {
+		return new WP_REST_Response( array( 'text' => 'Could not open modal: ' . $response->get_error_message() ), 200 );
+	}
+
+	// Slack slash commands need an empty 200 after views.open
+	return new WP_REST_Response( '', 200 );
+}
+
+// ---------- Modal submission handler ----------
+function aimes_slack_handle_interaction( WP_REST_Request $request ) {
+	if ( ! aimes_slack_verify_signature( $request ) ) {
+		return new WP_REST_Response( array( 'error' => 'Invalid signature' ), 403 );
+	}
+
+	$body = array();
+	parse_str( $request->get_body(), $body );
+	$payload_raw = $body['payload'] ?? '';
+	if ( ! $payload_raw ) {
+		return new WP_REST_Response( '', 200 );
+	}
+	$payload = json_decode( $payload_raw, true );
+	if ( ! $payload || ( $payload['type'] ?? '' ) !== 'view_submission' ) {
+		return new WP_REST_Response( '', 200 );
+	}
+	if ( ( $payload['view']['callback_id'] ?? '' ) !== 'aimes_new_research' ) {
+		return new WP_REST_Response( '', 200 );
+	}
+
+	$vals = $payload['view']['state']['values'] ?? array();
+
+	$title   = trim( $vals['block_title']['title']['value']     ?? '' );
+	$summary = trim( $vals['block_summary']['summary']['value'] ?? '' );
+	$authors = trim( $vals['block_authors']['authors']['value'] ?? '' );
+	$journal = trim( $vals['block_journal']['journal']['value'] ?? '' );
+	$year    = trim( $vals['block_year']['year']['value']       ?? '' );
+	$doi     = trim( $vals['block_doi']['doi']['value']         ?? '' );
+	$cat_id  = trim( $vals['block_category']['category']['selected_option']['value'] ?? '' );
+	$tags    = trim( $vals['block_tags']['tags']['value']       ?? '' );
+	$status  = $vals['block_status']['status']['selected_option']['value'] ?? 'draft';
+
+	if ( ! $title ) {
+		// Return validation error to Slack
+		return new WP_REST_Response( array(
+			'response_action' => 'errors',
+			'errors'          => array( 'block_title' => 'Title is required.' ),
+		), 200 );
+	}
+
+	// Create the portfolio-item post
+	$post_id = wp_insert_post( array(
+		'post_title'   => sanitize_text_field( $title ),
+		'post_content' => wp_kses_post( $summary ),
+		'post_status'  => in_array( $status, array( 'draft', 'publish' ), true ) ? $status : 'draft',
+		'post_type'    => 'portfolio-item',
+	), true );
+
+	if ( is_wp_error( $post_id ) ) {
+		return new WP_REST_Response( array(
+			'response_action' => 'errors',
+			'errors'          => array( 'block_title' => 'WP error: ' . $post_id->get_error_message() ),
+		), 200 );
+	}
+
+	// --- Post meta ---
+	// Description (qodef field mirrors post_content)
+	if ( $summary ) {
+		update_post_meta( $post_id, 'qodef_portfolio_description', wp_kses_post( $summary ) );
+	}
+
+	// External link (DOI)
+	if ( $doi ) {
+		update_post_meta( $post_id, 'qodef_portfolio_single_external_link',        esc_url_raw( $doi ) );
+		update_post_meta( $post_id, 'qodef_portfolio_single_external_link_target', '_blank' );
+	}
+
+	// Info items repeater: Authors, Journal, Year
+	$info_items  = array();
+	$info_labels = array();
+	if ( $authors ) {
+		$info_items[]  = sanitize_text_field( $authors );
+		$info_labels[] = 'Authors';
+	}
+	if ( $journal ) {
+		$info_items[]  = sanitize_text_field( $journal );
+		$info_labels[] = 'Journal';
+	}
+	if ( $year ) {
+		$info_items[]  = sanitize_text_field( $year );
+		$info_labels[] = 'Year';
+	}
+	if ( $info_items ) {
+		update_post_meta( $post_id, 'qodef_portfolio_info_items',       $info_items );
+		update_post_meta( $post_id, 'qodef_portfolio_info_item_labels', $info_labels );
+	}
+
+	// --- Taxonomies ---
+	if ( $cat_id ) {
+		wp_set_post_terms( $post_id, array( (int) $cat_id ), 'portfolio-category' );
+	}
+	if ( $tags ) {
+		$tag_names = array_map( 'trim', explode( ',', $tags ) );
+		$tag_names = array_filter( $tag_names );
+		wp_set_post_terms( $post_id, $tag_names, 'portfolio-tag' );
+	}
+
+	// --- Slack confirmation DM ---
+	$user_id  = $payload['user']['id'] ?? '';
+	$edit_url = admin_url( 'post.php?post=' . $post_id . '&action=edit' );
+	$msg_text = ( 'publish' === $status )
+		? ":white_check_mark: *Research Post published!*\n*{$title}*\n<{$edit_url}|Edit in WP Admin>"
+		: ":memo: *Research Post saved as Draft.*\n*{$title}*\n<{$edit_url}|Review & publish in WP Admin>";
+
+	if ( $user_id && defined( 'AIMES_SLACK_BOT_TOKEN' ) ) {
+		wp_remote_post( 'https://slack.com/api/chat.postMessage', array(
+			'headers' => array(
+				'Content-Type'  => 'application/json',
+				'Authorization' => 'Bearer ' . AIMES_SLACK_BOT_TOKEN,
+			),
+			'body'    => wp_json_encode( array(
+				'channel' => $user_id,
+				'text'    => $msg_text,
+				'mrkdwn'  => true,
+			) ),
+			'timeout' => 10,
+		) );
+	}
+
+	// Empty 200 closes the modal
+	return new WP_REST_Response( '', 200 );
+}

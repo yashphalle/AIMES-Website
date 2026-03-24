@@ -2,7 +2,137 @@
 /**
  * Talks Page Template
  * Integrated with theme - uses header/footer
+ * Handles both /talks/ listing and /talks/{slug}/ detail pages
  */
+
+// --- Single talk detail page ---
+// Use registered WP query var first (most reliable), fall back to raw $_GET
+$talk_id = absint( get_query_var( 'talk_id' ) );
+if ( ! $talk_id ) {
+	$talk_id = isset( $_GET['talk_id'] ) ? absint( $_GET['talk_id'] ) : 0;
+}
+
+if ( $talk_id ) {
+	$t = get_post( $talk_id );
+
+	if ( ! $t || $t->post_type !== 'aimes_talk' || $t->post_status !== 'publish' ) {
+		wp_redirect( home_url( '/talks/' ), 302 );
+		exit;
+	}
+	$date_raw = get_post_meta( $t->ID, '_aimes_talk_date', true );
+	$ts       = $date_raw ? strtotime( $date_raw ) : false;
+	$thumb    = get_post_meta( $t->ID, '_aimes_talk_thumb', true );
+	if ( ! $thumb ) {
+		$thumb = get_the_post_thumbnail_url( $t->ID, 'full' ) ?: '';
+	}
+	$now         = current_time( 'Y-m-d\TH:i' );
+	$is_upcoming = $date_raw && $date_raw >= $now;
+	$talk = array(
+		'title'       => get_the_title( $t->ID ),
+		'speaker'     => get_post_meta( $t->ID, '_aimes_talk_speaker', true ),
+		'speaker_bio' => get_post_meta( $t->ID, '_aimes_talk_speaker_bio', true ),
+		'location'    => get_post_meta( $t->ID, '_aimes_talk_location', true ),
+		'date_fmt'    => $ts ? date_i18n( 'F j, Y', $ts ) : '',
+		'time_fmt'    => $ts ? date_i18n( 'g:i A', $ts ) : '',
+		'month'       => $ts ? date_i18n( 'M', $ts ) : '',
+		'day'         => $ts ? date_i18n( 'j', $ts ) : '',
+		'year'        => $ts ? date_i18n( 'Y', $ts ) : '',
+		'thumb'       => $thumb,
+		'register'    => get_post_meta( $t->ID, '_aimes_talk_register', true ),
+		'virtual_url' => get_post_meta( $t->ID, '_aimes_talk_virtual_url', true ),
+		'recording'   => get_post_meta( $t->ID, '_aimes_talk_recording', true ),
+		'content'     => $t->post_content,
+	);
+
+	get_header();
+	?>
+	<div class="aimes-talk-detail">
+		<div class="aimes-talk-detail-inner">
+
+			<a href="<?php echo esc_url( home_url( '/talks/' ) ); ?>" class="aimes-talk-detail-back">← Back to Talks</a>
+
+			<div class="aimes-talk-detail-hero">
+				<?php if ( $talk['thumb'] ) : ?>
+				<div class="aimes-talk-detail-thumb">
+					<img src="<?php echo esc_url( $talk['thumb'] ); ?>" alt="<?php echo esc_attr( $talk['title'] ); ?>">
+				</div>
+				<?php endif; ?>
+
+				<div class="aimes-talk-detail-main">
+					<?php if ( $is_upcoming ) : ?>
+						<span class="aimes-talk-detail-badge aimes-talk-detail-badge--upcoming">Upcoming</span>
+					<?php else : ?>
+						<span class="aimes-talk-detail-badge aimes-talk-detail-badge--past">Past Talk</span>
+					<?php endif; ?>
+
+					<h1 class="aimes-talk-detail-title"><?php echo esc_html( $talk['title'] ); ?></h1>
+
+					<?php if ( $talk['speaker'] ) : ?>
+						<div class="aimes-talk-detail-speaker"><?php echo esc_html( $talk['speaker'] ); ?></div>
+					<?php endif; ?>
+					<?php if ( $talk['speaker_bio'] ) : ?>
+						<div class="aimes-talk-detail-bio"><?php echo esc_html( $talk['speaker_bio'] ); ?></div>
+					<?php endif; ?>
+
+					<div class="aimes-talk-detail-meta">
+						<?php if ( $talk['date_fmt'] ) : ?>
+							<div class="aimes-talk-detail-meta-item">
+								<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+								<?php echo esc_html( $talk['date_fmt'] ); ?>
+								<?php if ( $talk['time_fmt'] ) : ?>&nbsp;·&nbsp;<?php echo esc_html( $talk['time_fmt'] ); ?><?php endif; ?>
+							</div>
+						<?php endif; ?>
+						<?php if ( $talk['location'] ) : ?>
+							<div class="aimes-talk-detail-meta-item">
+								<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+								<?php echo esc_html( $talk['location'] ); ?>
+							</div>
+						<?php endif; ?>
+					</div>
+
+					<?php if ( $is_upcoming && ( $talk['register'] || $talk['virtual_url'] ) ) : ?>
+					<div class="aimes-talk-detail-actions">
+						<?php if ( $talk['register'] ) : ?>
+							<a href="<?php echo esc_url( $talk['register'] ); ?>" class="aimes-talks-btn-primary">Register Now</a>
+						<?php endif; ?>
+						<?php if ( $talk['virtual_url'] ) : ?>
+							<a href="<?php echo esc_url( $talk['virtual_url'] ); ?>" class="aimes-talks-btn-outline">Join Virtual</a>
+						<?php endif; ?>
+					</div>
+					<?php endif; ?>
+				</div>
+			</div>
+
+			<?php if ( trim( $talk['content'] ) ) : ?>
+			<div class="aimes-talk-detail-content">
+				<?php echo wp_kses_post( wpautop( $talk['content'] ) ); ?>
+			</div>
+			<?php endif; ?>
+
+			<!-- Recording -->
+			<div class="aimes-talk-detail-recording">
+				<h3 class="aimes-talk-detail-recording-label">Recording</h3>
+				<?php if ( ! empty( $talk['recording'] ) ) : ?>
+					<a href="<?php echo esc_url( $talk['recording'] ); ?>" class="aimes-talk-detail-recording-btn" target="_blank" rel="noopener">
+						<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+						Watch Recording
+					</a>
+				<?php else : ?>
+					<span class="aimes-talk-detail-recording-unavailable">
+						<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+						Recording Unavailable
+					</span>
+				<?php endif; ?>
+			</div>
+
+		</div>
+	</div>
+	<?php
+	get_footer();
+	exit;
+}
+
+// --- Talks listing page ---
 
 // Query talks from the CPT
 $now   = current_time( 'Y-m-d\TH:i' );
@@ -26,7 +156,7 @@ foreach ( $talks as $t ) {
 	}
 	$item = array(
 		'id'          => $t->ID,
-		'permalink'   => get_permalink( $t->ID ),
+		'permalink'   => add_query_arg( 'talk_id', $t->ID, home_url( '/talks/' ) ),
 		'title'       => get_the_title( $t->ID ),
 		'speaker'     => get_post_meta( $t->ID, '_aimes_talk_speaker', true ),
 		'speaker_bio' => get_post_meta( $t->ID, '_aimes_talk_speaker_bio', true ),
