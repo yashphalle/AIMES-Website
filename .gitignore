@@ -3,6 +3,7 @@
 # --- Allow documentation ---
 !.gitignore
 !README.md
+!SLACK-POSTING-GUIDE.md
 !CONTENT-MANAGEMENT-GUIDE.md
 !TEAMS-POST-SETUP.md
 !WP-ADMIN-EDITABILITY-AUDIT.md

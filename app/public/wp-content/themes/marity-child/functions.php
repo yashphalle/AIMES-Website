@@ -685,6 +685,8 @@ if ( ! function_exists( 'marity_child_portfolio_list_enhance' ) ) {
 
 			$thumb_url = get_the_post_thumbnail_url( $p->ID, 'medium_large' );
 
+			$ext_link = get_post_meta( $p->ID, 'qodef_portfolio_single_external_link', true );
+
 			$items_data[ $p->ID ] = array(
 				'category' => $cat_label,
 				'excerpt'  => $excerpt,
@@ -692,6 +694,7 @@ if ( ! function_exists( 'marity_child_portfolio_list_enhance' ) ) {
 				'thumb'    => $thumb_url ? $thumb_url : '',
 				'title'    => get_the_title( $p->ID ),
 				'url'      => get_permalink( $p->ID ),
+				'ext_link' => $ext_link ? esc_url( $ext_link ) : '',
 			);
 		}
 		?>
@@ -729,9 +732,13 @@ if ( ! function_exists( 'marity_child_portfolio_list_enhance' ) ) {
 					// Category badge
 					var catHTML = d.category ? '<span style="position:absolute;top:14px;left:14px;font-size:9px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;background:#0e202a;color:#fff;padding:5px 12px;border-radius:4px;z-index:2;">' + d.category.replace(/</g,'&lt;') + '</span>' : '';
 
+					// Card always links to internal portfolio item page; external URL is on the "Click here" button within that page
+					var cardUrl    = d.url;
+					var cardTarget = '';
+
 					// Completely rebuild the article inner HTML
 					article.innerHTML =
-						'<a href="' + d.url + '" class="optionA-card" style="display:flex;flex-direction:column;height:100%;text-decoration:none;color:inherit;">' +
+						'<a href="' + cardUrl + '"' + cardTarget + ' class="optionA-card" style="display:flex;flex-direction:column;height:100%;text-decoration:none;color:inherit;">' +
 							'<div class="optionA-img" style="width:100%;height:220px;overflow:hidden;position:relative;background:#e8ecf0;flex-shrink:0;">' +
 								imgHTML +
 								catHTML +
@@ -1714,11 +1721,17 @@ function marity_child_remove_admin_menu_items() {
 add_action( 'admin_menu', 'marity_child_remove_admin_menu_items', 999 );
 
 // =============================================================================
-// BLOCK 6 — Slack → WordPress: Create Research Posts via Slack Modal
+// BLOCK 6 — Slack → WordPress: Create Posts via Slack Modals
+// Slash commands (all route to the same endpoints):
+//   /research  → Research Post (portfolio-item)
+//   /article   → Article (post)
+//   /talk      → Talk / Seminar (aimes_talk)
+//   /announce  → Announcement (aimes_announcement)
 // Endpoints:
-//   POST /wp-json/aimes/v1/slack/command     — handles /newresearch slash command
-//   POST /wp-json/aimes/v1/slack/interaction — handles modal submission
-// Credentials in wp-config.php:
+//   POST /wp-json/aimes/v1/slack/command     — slash command router
+//   POST /wp-json/aimes/v1/slack/interaction — modal submission router
+//   POST /wp-json/aimes/v1/slack/events      — DM image upload handler
+// Credentials in aimes-private.php (not in git, deploy via SFTP):
 //   define('AIMES_SLACK_SIGNING_SECRET', 'xxxx');
 //   define('AIMES_SLACK_BOT_TOKEN',      'xoxb-xxxx');
 // =============================================================================
@@ -1740,6 +1753,11 @@ function aimes_slack_register_routes() {
 		'callback'            => 'aimes_slack_handle_interaction',
 		'permission_callback' => '__return_true',
 	) );
+	register_rest_route( 'aimes/v1', '/slack/events', array(
+		'methods'             => 'POST',
+		'callback'            => 'aimes_slack_handle_events',
+		'permission_callback' => '__return_true',
+	) );
 }
 
 // ---------- Signature verification ----------
@@ -1747,177 +1765,296 @@ function aimes_slack_verify_signature( WP_REST_Request $request ) {
 	if ( ! defined( 'AIMES_SLACK_SIGNING_SECRET' ) ) {
 		return false;
 	}
-	$timestamp = $request->get_header( 'X-Slack-Request-Timestamp' );
+	$timestamp  = $request->get_header( 'X-Slack-Request-Timestamp' );
 	$sig_header = $request->get_header( 'X-Slack-Signature' );
 	if ( ! $timestamp || ! $sig_header ) {
 		return false;
 	}
-	// Reject replays older than 5 minutes
 	if ( abs( time() - (int) $timestamp ) > 300 ) {
 		return false;
 	}
-	$body      = $request->get_body();
-	$base_str  = 'v0:' . $timestamp . ':' . $body;
-	$computed  = 'v0=' . hash_hmac( 'sha256', $base_str, AIMES_SLACK_SIGNING_SECRET );
+	$body     = $request->get_body();
+	$base_str = 'v0:' . $timestamp . ':' . $body;
+	$computed = 'v0=' . hash_hmac( 'sha256', $base_str, AIMES_SLACK_SIGNING_SECRET );
 	return hash_equals( $computed, $sig_header );
 }
 
-// ---------- /newresearch slash command handler ----------
-function aimes_slack_handle_command( WP_REST_Request $request ) {
-	// DEBUG — temporarily skip sig check to confirm endpoint is reachable
-	return new WP_REST_Response( array( 'text' => 'Endpoint hit! Slack ↔ WordPress connected.' ), 200 );
+// ---------- Shared helpers ----------
 
-	if ( ! aimes_slack_verify_signature( $request ) ) {
-		return new WP_REST_Response( array( 'error' => 'Invalid signature' ), 403 );
+// Flush an empty HTTP 200 to Slack immediately (before DB work)
+function aimes_slack_flush_response() {
+	ignore_user_abort( true );
+	while ( ob_get_level() > 0 ) { ob_end_clean(); }
+	http_response_code( 200 );
+	header( 'Content-Type: text/plain' );
+	header( 'Content-Length: 0' );
+	header( 'Connection: close' );
+	flush();
+	if ( function_exists( 'fastcgi_finish_request' ) ) { fastcgi_finish_request(); }
+}
+
+// Send a DM to a Slack user
+function aimes_slack_dm( $user_id, $text ) {
+	if ( ! $user_id || ! defined( 'AIMES_SLACK_BOT_TOKEN' ) ) { return; }
+	wp_remote_post( 'https://slack.com/api/chat.postMessage', array(
+		'headers'  => array(
+			'Content-Type'  => 'application/json',
+			'Authorization' => 'Bearer ' . AIMES_SLACK_BOT_TOKEN,
+		),
+		'body'     => wp_json_encode( array( 'channel' => $user_id, 'text' => $text, 'mrkdwn' => true ) ),
+		'timeout'  => 10,
+		'blocking' => true,
+	) );
+}
+
+// Confirm post created + ask user to DM an image for featured photo
+function aimes_slack_dm_await_image( $user_id, $post_id, $title, $type_label ) {
+	if ( ! $user_id ) { return; }
+	set_transient( 'aimes_pending_image_' . $user_id, $post_id, 10 * MINUTE_IN_SECONDS );
+	$edit_url = admin_url( 'post.php?post=' . $post_id . '&action=edit' );
+	$msg = ":white_check_mark: *{$type_label} published!*\n*{$title}*\n<{$edit_url}|Edit in WP Admin>\n\n:frame_with_picture: *Upload an image here* to set the featured image (you have 10 minutes, or set it manually via the link above).";
+	aimes_slack_dm( $user_id, $msg );
+}
+
+// Confirm post created — no image prompt (announcements)
+function aimes_slack_dm_confirm( $user_id, $post_id, $title, $type_label ) {
+	if ( ! $user_id ) { return; }
+	$edit_url = admin_url( 'post.php?post=' . $post_id . '&action=edit' );
+	aimes_slack_dm( $user_id, ":white_check_mark: *{$type_label} published!*\n*{$title}*\n<{$edit_url}|Edit in WP Admin>" );
+}
+
+// =============================================================================
+// Modal builders
+// =============================================================================
+
+function aimes_build_research_modal() {
+	$cat_terms   = get_terms( array( 'taxonomy' => 'portfolio-category', 'hide_empty' => false, 'orderby' => 'name' ) );
+	$cat_options = array();
+	if ( ! is_wp_error( $cat_terms ) ) {
+		foreach ( $cat_terms as $t ) {
+			$cat_options[] = array(
+				'text'  => array( 'type' => 'plain_text', 'text' => $t->name ),
+				'value' => (string) $t->term_id,
+			);
+		}
+	}
+	$category_block = empty( $cat_options )
+		? array(
+			'type' => 'input', 'block_id' => 'block_category',
+			'label' => array( 'type' => 'plain_text', 'text' => 'Category' ), 'optional' => true,
+			'element' => array( 'type' => 'plain_text_input', 'action_id' => 'category' ),
+			'hint' => array( 'type' => 'plain_text', 'text' => 'No categories yet — type a name to create one.' ),
+		  )
+		: array(
+			'type' => 'input', 'block_id' => 'block_category',
+			'label' => array( 'type' => 'plain_text', 'text' => 'Category' ), 'optional' => true,
+			'element' => array(
+				'type' => 'static_select', 'action_id' => 'category',
+				'placeholder' => array( 'type' => 'plain_text', 'text' => 'Select a category…' ),
+				'options' => $cat_options,
+			),
+		  );
+	return array(
+		'type' => 'modal', 'callback_id' => 'aimes_new_research',
+		'title'  => array( 'type' => 'plain_text', 'text' => 'New Research Post' ),
+		'submit' => array( 'type' => 'plain_text', 'text' => 'Publish' ),
+		'close'  => array( 'type' => 'plain_text', 'text' => 'Cancel' ),
+		'blocks' => array(
+			array( 'type' => 'input', 'block_id' => 'block_title',
+				'label' => array( 'type' => 'plain_text', 'text' => 'Title *' ),
+				'element' => array( 'type' => 'plain_text_input', 'action_id' => 'title' ) ),
+			array( 'type' => 'input', 'block_id' => 'block_summary', 'optional' => true,
+				'label' => array( 'type' => 'plain_text', 'text' => 'Short Summary' ),
+				'element' => array( 'type' => 'plain_text_input', 'action_id' => 'summary', 'multiline' => true ) ),
+			array( 'type' => 'input', 'block_id' => 'block_authors', 'optional' => true,
+				'label' => array( 'type' => 'plain_text', 'text' => 'Authors (comma-separated)' ),
+				'element' => array( 'type' => 'plain_text_input', 'action_id' => 'authors' ) ),
+			array( 'type' => 'input', 'block_id' => 'block_journal', 'optional' => true,
+				'label' => array( 'type' => 'plain_text', 'text' => 'Journal / Venue' ),
+				'element' => array( 'type' => 'plain_text_input', 'action_id' => 'journal' ) ),
+			array( 'type' => 'input', 'block_id' => 'block_year', 'optional' => true,
+				'label' => array( 'type' => 'plain_text', 'text' => 'Year (e.g. 2024)' ),
+				'element' => array( 'type' => 'plain_text_input', 'action_id' => 'year' ) ),
+			array( 'type' => 'input', 'block_id' => 'block_doi', 'optional' => true,
+				'label' => array( 'type' => 'plain_text', 'text' => 'Article URL' ),
+				'element' => array( 'type' => 'plain_text_input', 'action_id' => 'doi' ),
+				'hint' => array( 'type' => 'plain_text', 'text' => 'Full URL to the paper, article, or project page' ) ),
+			$category_block,
+			array( 'type' => 'input', 'block_id' => 'block_tags', 'optional' => true,
+				'label' => array( 'type' => 'plain_text', 'text' => 'Tags (comma-separated)' ),
+				'element' => array( 'type' => 'plain_text_input', 'action_id' => 'tags' ) ),
+		),
+	);
+}
+
+function aimes_build_article_modal() {
+	$categories  = get_categories( array( 'hide_empty' => false, 'orderby' => 'name' ) );
+	$cat_options = array();
+	foreach ( $categories as $c ) {
+		$cat_options[] = array(
+			'text'  => array( 'type' => 'plain_text', 'text' => $c->name ),
+			'value' => (string) $c->term_id,
+		);
+	}
+	$category_block = empty( $cat_options )
+		? array(
+			'type' => 'input', 'block_id' => 'block_category', 'optional' => true,
+			'label' => array( 'type' => 'plain_text', 'text' => 'Category' ),
+			'element' => array( 'type' => 'plain_text_input', 'action_id' => 'category' ),
+		  )
+		: array(
+			'type' => 'input', 'block_id' => 'block_category', 'optional' => true,
+			'label' => array( 'type' => 'plain_text', 'text' => 'Category' ),
+			'element' => array(
+				'type' => 'static_select', 'action_id' => 'category',
+				'placeholder' => array( 'type' => 'plain_text', 'text' => 'Select a category…' ),
+				'options' => $cat_options,
+			),
+		  );
+	return array(
+		'type' => 'modal', 'callback_id' => 'aimes_new_article',
+		'title'  => array( 'type' => 'plain_text', 'text' => 'New Article' ),
+		'submit' => array( 'type' => 'plain_text', 'text' => 'Publish' ),
+		'close'  => array( 'type' => 'plain_text', 'text' => 'Cancel' ),
+		'blocks' => array(
+			array( 'type' => 'input', 'block_id' => 'block_title',
+				'label' => array( 'type' => 'plain_text', 'text' => 'Title *' ),
+				'element' => array( 'type' => 'plain_text_input', 'action_id' => 'title' ) ),
+			array( 'type' => 'input', 'block_id' => 'block_content', 'optional' => true,
+				'label' => array( 'type' => 'plain_text', 'text' => 'Content' ),
+				'element' => array( 'type' => 'plain_text_input', 'action_id' => 'content', 'multiline' => true ) ),
+			$category_block,
+			array( 'type' => 'input', 'block_id' => 'block_tags', 'optional' => true,
+				'label' => array( 'type' => 'plain_text', 'text' => 'Tags (comma-separated)' ),
+				'element' => array( 'type' => 'plain_text_input', 'action_id' => 'tags' ) ),
+		),
+	);
+}
+
+function aimes_build_talk_modal() {
+	return array(
+		'type' => 'modal', 'callback_id' => 'aimes_new_talk',
+		'title'  => array( 'type' => 'plain_text', 'text' => 'New Talk / Seminar' ),
+		'submit' => array( 'type' => 'plain_text', 'text' => 'Publish' ),
+		'close'  => array( 'type' => 'plain_text', 'text' => 'Cancel' ),
+		'blocks' => array(
+			array( 'type' => 'input', 'block_id' => 'block_title',
+				'label' => array( 'type' => 'plain_text', 'text' => 'Talk Title *' ),
+				'element' => array( 'type' => 'plain_text_input', 'action_id' => 'title' ) ),
+			array( 'type' => 'input', 'block_id' => 'block_abstract', 'optional' => true,
+				'label' => array( 'type' => 'plain_text', 'text' => 'Abstract / Description' ),
+				'element' => array( 'type' => 'plain_text_input', 'action_id' => 'abstract', 'multiline' => true ) ),
+			array( 'type' => 'input', 'block_id' => 'block_speaker',
+				'label' => array( 'type' => 'plain_text', 'text' => 'Speaker Name *' ),
+				'element' => array( 'type' => 'plain_text_input', 'action_id' => 'speaker' ) ),
+			array( 'type' => 'input', 'block_id' => 'block_speaker_bio', 'optional' => true,
+				'label' => array( 'type' => 'plain_text', 'text' => 'Speaker Bio / Affiliation' ),
+				'element' => array( 'type' => 'plain_text_input', 'action_id' => 'speaker_bio' ) ),
+			array( 'type' => 'input', 'block_id' => 'block_date',
+				'label' => array( 'type' => 'plain_text', 'text' => 'Date *' ),
+				'element' => array( 'type' => 'datepicker', 'action_id' => 'date',
+					'placeholder' => array( 'type' => 'plain_text', 'text' => 'Select date' ) ) ),
+			array( 'type' => 'input', 'block_id' => 'block_time',
+				'label' => array( 'type' => 'plain_text', 'text' => 'Time *' ),
+				'element' => array( 'type' => 'timepicker', 'action_id' => 'time',
+					'placeholder' => array( 'type' => 'plain_text', 'text' => 'Select time' ) ) ),
+			array( 'type' => 'input', 'block_id' => 'block_location', 'optional' => true,
+				'label' => array( 'type' => 'plain_text', 'text' => 'Location / Room' ),
+				'element' => array( 'type' => 'plain_text_input', 'action_id' => 'location' ),
+				'hint' => array( 'type' => 'plain_text', 'text' => 'e.g. "Room 101" or "Virtual via Zoom"' ) ),
+			array( 'type' => 'input', 'block_id' => 'block_virtual_url', 'optional' => true,
+				'label' => array( 'type' => 'plain_text', 'text' => 'Zoom / Virtual Link' ),
+				'element' => array( 'type' => 'plain_text_input', 'action_id' => 'virtual_url' ) ),
+			array( 'type' => 'input', 'block_id' => 'block_register', 'optional' => true,
+				'label' => array( 'type' => 'plain_text', 'text' => 'RSVP / Registration URL' ),
+				'element' => array( 'type' => 'plain_text_input', 'action_id' => 'register' ) ),
+		),
+	);
+}
+
+function aimes_build_announce_modal() {
+	return array(
+		'type' => 'modal', 'callback_id' => 'aimes_new_announce',
+		'title'  => array( 'type' => 'plain_text', 'text' => 'New Announcement' ),
+		'submit' => array( 'type' => 'plain_text', 'text' => 'Publish' ),
+		'close'  => array( 'type' => 'plain_text', 'text' => 'Cancel' ),
+		'blocks' => array(
+			array( 'type' => 'input', 'block_id' => 'block_text',
+				'label' => array( 'type' => 'plain_text', 'text' => 'Announcement Text *' ),
+				'element' => array( 'type' => 'plain_text_input', 'action_id' => 'text' ),
+				'hint' => array( 'type' => 'plain_text', 'text' => 'This appears in the homepage scrolling ticker' ) ),
+			array( 'type' => 'input', 'block_id' => 'block_link', 'optional' => true,
+				'label' => array( 'type' => 'plain_text', 'text' => 'Link URL' ),
+				'element' => array( 'type' => 'plain_text_input', 'action_id' => 'link' ),
+				'hint' => array( 'type' => 'plain_text', 'text' => 'Optional URL to link the announcement to' ) ),
+		),
+	);
+}
+
+// =============================================================================
+// Slash command router
+// =============================================================================
+
+function aimes_slack_handle_command( WP_REST_Request $request ) {
+	if ( ! defined( 'AIMES_SLACK_BOT_TOKEN' ) || ! AIMES_SLACK_BOT_TOKEN ) {
+		return new WP_REST_Response( array( 'text' => 'Error: Bot token not loaded. Check aimes-private.php on server.' ), 200 );
 	}
 
 	$body    = array();
 	parse_str( $request->get_body(), $body );
 	$trigger = $body['trigger_id'] ?? '';
+	$command = $body['command']    ?? '';
 	if ( ! $trigger ) {
 		return new WP_REST_Response( array( 'text' => 'Missing trigger_id.' ), 200 );
 	}
 
-	// Build category options from portfolio-category taxonomy
-	$cats    = get_terms( array( 'taxonomy' => 'portfolio-category', 'hide_empty' => false ) );
-	$cat_options = array(
-		array( 'text' => array( 'type' => 'plain_text', 'text' => '— Select category —' ), 'value' => '' ),
-	);
-	if ( ! is_wp_error( $cats ) ) {
-		foreach ( $cats as $cat ) {
-			$cat_options[] = array(
-				'text'  => array( 'type' => 'plain_text', 'text' => $cat->name ),
-				'value' => (string) $cat->term_id,
-			);
-		}
+	switch ( $command ) {
+		case '/research':
+		case '/newresearch':
+			$view = aimes_build_research_modal();
+			break;
+		case '/article':
+			$view = aimes_build_article_modal();
+			break;
+		case '/talk':
+			$view = aimes_build_talk_modal();
+			break;
+		case '/announce':
+			$view = aimes_build_announce_modal();
+			break;
+		default:
+			return new WP_REST_Response( array( 'text' => 'Unknown command: ' . esc_html( $command ) ), 200 );
 	}
 
-	$modal = array(
-		'trigger_id' => $trigger,
-		'view'       => array(
-			'type'            => 'modal',
-			'callback_id'     => 'aimes_new_research',
-			'title'           => array( 'type' => 'plain_text', 'text' => 'New Research Post' ),
-			'submit'          => array( 'type' => 'plain_text', 'text' => 'Publish' ),
-			'close'           => array( 'type' => 'plain_text', 'text' => 'Cancel' ),
-			'blocks'          => array(
-				// Title
-				array(
-					'type'     => 'input',
-					'block_id' => 'block_title',
-					'label'    => array( 'type' => 'plain_text', 'text' => 'Title *' ),
-					'element'  => array( 'type' => 'plain_text_input', 'action_id' => 'title' ),
-				),
-				// Short Summary
-				array(
-					'type'     => 'input',
-					'block_id' => 'block_summary',
-					'label'    => array( 'type' => 'plain_text', 'text' => 'Short Summary' ),
-					'optional' => true,
-					'element'  => array(
-						'type'      => 'plain_text_input',
-						'action_id' => 'summary',
-						'multiline' => true,
-					),
-				),
-				// Authors
-				array(
-					'type'     => 'input',
-					'block_id' => 'block_authors',
-					'label'    => array( 'type' => 'plain_text', 'text' => 'Authors (comma-separated)' ),
-					'optional' => true,
-					'element'  => array( 'type' => 'plain_text_input', 'action_id' => 'authors' ),
-				),
-				// Journal / Venue
-				array(
-					'type'     => 'input',
-					'block_id' => 'block_journal',
-					'label'    => array( 'type' => 'plain_text', 'text' => 'Journal / Venue' ),
-					'optional' => true,
-					'element'  => array( 'type' => 'plain_text_input', 'action_id' => 'journal' ),
-				),
-				// Year
-				array(
-					'type'     => 'input',
-					'block_id' => 'block_year',
-					'label'    => array( 'type' => 'plain_text', 'text' => 'Year (e.g. 2024)' ),
-					'optional' => true,
-					'element'  => array( 'type' => 'plain_text_input', 'action_id' => 'year' ),
-				),
-				// DOI / External Link
-				array(
-					'type'     => 'input',
-					'block_id' => 'block_doi',
-					'label'    => array( 'type' => 'plain_text', 'text' => 'DOI / External Link URL' ),
-					'optional' => true,
-					'element'  => array( 'type' => 'plain_text_input', 'action_id' => 'doi' ),
-					'hint'     => array( 'type' => 'plain_text', 'text' => 'Full URL, e.g. https://doi.org/10.xxxx/yyyy' ),
-				),
-				// Category dropdown
-				array(
-					'type'     => 'input',
-					'block_id' => 'block_category',
-					'label'    => array( 'type' => 'plain_text', 'text' => 'Category' ),
-					'optional' => true,
-					'element'  => array(
-						'type'      => 'static_select',
-						'action_id' => 'category',
-						'options'   => $cat_options,
-					),
-				),
-				// Tags
-				array(
-					'type'     => 'input',
-					'block_id' => 'block_tags',
-					'label'    => array( 'type' => 'plain_text', 'text' => 'Tags (comma-separated)' ),
-					'optional' => true,
-					'element'  => array( 'type' => 'plain_text_input', 'action_id' => 'tags' ),
-				),
-				// Status
-				array(
-					'type'     => 'input',
-					'block_id' => 'block_status',
-					'label'    => array( 'type' => 'plain_text', 'text' => 'Publish status' ),
-					'element'  => array(
-						'type'           => 'static_select',
-						'action_id'      => 'status',
-						'initial_option' => array(
-							'text'  => array( 'type' => 'plain_text', 'text' => 'Draft (review before publishing)' ),
-							'value' => 'draft',
-						),
-						'options' => array(
-							array( 'text' => array( 'type' => 'plain_text', 'text' => 'Draft (review before publishing)' ), 'value' => 'draft' ),
-							array( 'text' => array( 'type' => 'plain_text', 'text' => 'Publish immediately' ),             'value' => 'publish' ),
-						),
-					),
-				),
-			),
-		),
-	);
+	$json_body = wp_json_encode( array( 'trigger_id' => $trigger, 'view' => $view ) );
+	if ( ! $json_body ) {
+		return new WP_REST_Response( array( 'text' => 'JSON encode failed.' ), 200 );
+	}
 
 	$response = wp_remote_post( 'https://slack.com/api/views.open', array(
 		'headers' => array(
 			'Content-Type'  => 'application/json',
 			'Authorization' => 'Bearer ' . AIMES_SLACK_BOT_TOKEN,
 		),
-		'body'    => wp_json_encode( $modal ),
+		'body'    => $json_body,
 		'timeout' => 10,
 	) );
 
 	if ( is_wp_error( $response ) ) {
-		return new WP_REST_Response( array( 'text' => 'Could not open modal: ' . $response->get_error_message() ), 200 );
+		return new WP_REST_Response( array( 'text' => 'WP_Error: ' . $response->get_error_message() ), 200 );
 	}
-
-	// Slack slash commands need an empty 200 after views.open
-	return new WP_REST_Response( '', 200 );
+	$api = json_decode( wp_remote_retrieve_body( $response ), true );
+	if ( empty( $api['ok'] ) ) {
+		return new WP_REST_Response( array( 'text' => 'views.open failed: ' . ( $api['error'] ?? 'unknown' ) ), 200 );
+	}
+	return new WP_REST_Response( null, 200 );
 }
 
-// ---------- Modal submission handler ----------
-function aimes_slack_handle_interaction( WP_REST_Request $request ) {
-	if ( ! aimes_slack_verify_signature( $request ) ) {
-		return new WP_REST_Response( array( 'error' => 'Invalid signature' ), 403 );
-	}
+// =============================================================================
+// Modal submission router + post creators
+// =============================================================================
 
+function aimes_slack_handle_interaction( WP_REST_Request $request ) {
 	$body = array();
 	parse_str( $request->get_body(), $body );
 	$payload_raw = $body['payload'] ?? '';
@@ -1928,109 +2065,298 @@ function aimes_slack_handle_interaction( WP_REST_Request $request ) {
 	if ( ! $payload || ( $payload['type'] ?? '' ) !== 'view_submission' ) {
 		return new WP_REST_Response( '', 200 );
 	}
-	if ( ( $payload['view']['callback_id'] ?? '' ) !== 'aimes_new_research' ) {
-		return new WP_REST_Response( '', 200 );
+
+	$callback_id = $payload['view']['callback_id'] ?? '';
+	$vals        = $payload['view']['state']['values'] ?? array();
+	$user_id     = $payload['user']['id'] ?? '';
+
+	switch ( $callback_id ) {
+		case 'aimes_new_research':
+			return aimes_create_research_post( $vals, $user_id );
+		case 'aimes_new_article':
+			return aimes_create_article_post( $vals, $user_id );
+		case 'aimes_new_talk':
+			return aimes_create_talk_post( $vals, $user_id );
+		case 'aimes_new_announce':
+			return aimes_create_announcement_post( $vals, $user_id );
+		default:
+			return new WP_REST_Response( '', 200 );
 	}
+}
 
-	$vals = $payload['view']['state']['values'] ?? array();
-
+// ---------- Post creator: Research Post ----------
+function aimes_create_research_post( $vals, $user_id ) {
 	$title   = trim( $vals['block_title']['title']['value']     ?? '' );
 	$summary = trim( $vals['block_summary']['summary']['value'] ?? '' );
 	$authors = trim( $vals['block_authors']['authors']['value'] ?? '' );
 	$journal = trim( $vals['block_journal']['journal']['value'] ?? '' );
 	$year    = trim( $vals['block_year']['year']['value']       ?? '' );
 	$doi     = trim( $vals['block_doi']['doi']['value']         ?? '' );
-	$cat_id  = trim( $vals['block_category']['category']['selected_option']['value'] ?? '' );
+	$cat_raw = $vals['block_category']['category'] ?? array();
+	$cat_id  = $cat_raw['selected_option']['value'] ?? ( trim( $cat_raw['value'] ?? '' ) );
 	$tags    = trim( $vals['block_tags']['tags']['value']       ?? '' );
-	$status  = $vals['block_status']['status']['selected_option']['value'] ?? 'draft';
 
 	if ( ! $title ) {
-		// Return validation error to Slack
 		return new WP_REST_Response( array(
 			'response_action' => 'errors',
 			'errors'          => array( 'block_title' => 'Title is required.' ),
 		), 200 );
 	}
 
-	// Create the portfolio-item post
+	aimes_slack_flush_response();
+
 	$post_id = wp_insert_post( array(
 		'post_title'   => sanitize_text_field( $title ),
 		'post_content' => wp_kses_post( $summary ),
-		'post_status'  => in_array( $status, array( 'draft', 'publish' ), true ) ? $status : 'draft',
+		'post_status'  => 'publish',
 		'post_type'    => 'portfolio-item',
 	), true );
 
-	if ( is_wp_error( $post_id ) ) {
-		return new WP_REST_Response( array(
-			'response_action' => 'errors',
-			'errors'          => array( 'block_title' => 'WP error: ' . $post_id->get_error_message() ),
-		), 200 );
-	}
+	if ( is_wp_error( $post_id ) ) { exit; }
 
-	// --- Post meta ---
-	// Description (qodef field mirrors post_content)
-	if ( $summary ) {
-		update_post_meta( $post_id, 'qodef_portfolio_description', wp_kses_post( $summary ) );
-	}
-
-	// External link (DOI)
+	if ( $summary ) { update_post_meta( $post_id, 'qodef_portfolio_description', wp_kses_post( $summary ) ); }
 	if ( $doi ) {
 		update_post_meta( $post_id, 'qodef_portfolio_single_external_link',        esc_url_raw( $doi ) );
 		update_post_meta( $post_id, 'qodef_portfolio_single_external_link_target', '_blank' );
 	}
 
-	// Info items repeater: Authors, Journal, Year
-	$info_items  = array();
-	$info_labels = array();
-	if ( $authors ) {
-		$info_items[]  = sanitize_text_field( $authors );
-		$info_labels[] = 'Authors';
+	$info_items = array();
+	if ( $doi ) {
+		$info_items[] = array( 'qodef_info_item_label' => 'Article Link', 'qodef_info_item_value' => 'Click here', 'qodef_info_item_link' => esc_url_raw( $doi ), 'qodef_info_item_target' => '_blank' );
 	}
-	if ( $journal ) {
-		$info_items[]  = sanitize_text_field( $journal );
-		$info_labels[] = 'Journal';
-	}
-	if ( $year ) {
-		$info_items[]  = sanitize_text_field( $year );
-		$info_labels[] = 'Year';
-	}
-	if ( $info_items ) {
-		update_post_meta( $post_id, 'qodef_portfolio_info_items',       $info_items );
-		update_post_meta( $post_id, 'qodef_portfolio_info_item_labels', $info_labels );
-	}
+	if ( $authors ) { $info_items[] = array( 'qodef_info_item_label' => 'Authors', 'qodef_info_item_value' => sanitize_text_field( $authors ), 'qodef_info_item_link' => '', 'qodef_info_item_target' => '' ); }
+	if ( $journal ) { $info_items[] = array( 'qodef_info_item_label' => 'Journal', 'qodef_info_item_value' => sanitize_text_field( $journal ), 'qodef_info_item_link' => '', 'qodef_info_item_target' => '' ); }
+	if ( $year )    { $info_items[] = array( 'qodef_info_item_label' => 'Year',    'qodef_info_item_value' => sanitize_text_field( $year ),    'qodef_info_item_link' => '', 'qodef_info_item_target' => '' ); }
+	if ( $info_items ) { update_post_meta( $post_id, 'qodef_portfolio_info_items', $info_items ); }
 
-	// --- Taxonomies ---
 	if ( $cat_id ) {
-		wp_set_post_terms( $post_id, array( (int) $cat_id ), 'portfolio-category' );
+		$cat_arg = is_numeric( $cat_id ) ? array( (int) $cat_id ) : array( $cat_id );
+		wp_set_post_terms( $post_id, $cat_arg, 'portfolio-category' );
 	}
 	if ( $tags ) {
-		$tag_names = array_map( 'trim', explode( ',', $tags ) );
-		$tag_names = array_filter( $tag_names );
-		wp_set_post_terms( $post_id, $tag_names, 'portfolio-tag' );
+		wp_set_post_terms( $post_id, array_filter( array_map( 'trim', explode( ',', $tags ) ) ), 'portfolio-tag' );
 	}
 
-	// --- Slack confirmation DM ---
-	$user_id  = $payload['user']['id'] ?? '';
-	$edit_url = admin_url( 'post.php?post=' . $post_id . '&action=edit' );
-	$msg_text = ( 'publish' === $status )
-		? ":white_check_mark: *Research Post published!*\n*{$title}*\n<{$edit_url}|Edit in WP Admin>"
-		: ":memo: *Research Post saved as Draft.*\n*{$title}*\n<{$edit_url}|Review & publish in WP Admin>";
+	aimes_slack_dm_await_image( $user_id, $post_id, $title, 'Research Post' );
+	exit;
+}
 
-	if ( $user_id && defined( 'AIMES_SLACK_BOT_TOKEN' ) ) {
-		wp_remote_post( 'https://slack.com/api/chat.postMessage', array(
-			'headers' => array(
-				'Content-Type'  => 'application/json',
-				'Authorization' => 'Bearer ' . AIMES_SLACK_BOT_TOKEN,
-			),
-			'body'    => wp_json_encode( array(
-				'channel' => $user_id,
-				'text'    => $msg_text,
-				'mrkdwn'  => true,
-			) ),
-			'timeout' => 10,
-		) );
+// ---------- Post creator: Article ----------
+function aimes_create_article_post( $vals, $user_id ) {
+	$title   = trim( $vals['block_title']['title']['value']     ?? '' );
+	$content = trim( $vals['block_content']['content']['value'] ?? '' );
+	$cat_raw = $vals['block_category']['category'] ?? array();
+	$cat_id  = $cat_raw['selected_option']['value'] ?? ( trim( $cat_raw['value'] ?? '' ) );
+	$tags    = trim( $vals['block_tags']['tags']['value']       ?? '' );
+
+	if ( ! $title ) {
+		return new WP_REST_Response( array(
+			'response_action' => 'errors',
+			'errors'          => array( 'block_title' => 'Title is required.' ),
+		), 200 );
 	}
 
-	// Empty 200 closes the modal
-	return new WP_REST_Response( '', 200 );
+	aimes_slack_flush_response();
+
+	$post_id = wp_insert_post( array(
+		'post_title'   => sanitize_text_field( $title ),
+		'post_content' => wp_kses_post( $content ),
+		'post_status'  => 'publish',
+		'post_type'    => 'post',
+	), true );
+
+	if ( is_wp_error( $post_id ) ) { exit; }
+
+	if ( $cat_id ) {
+		$cat_arg = is_numeric( $cat_id ) ? array( (int) $cat_id ) : array( $cat_id );
+		wp_set_post_categories( $post_id, $cat_arg );
+	}
+	if ( $tags ) {
+		wp_set_post_tags( $post_id, array_filter( array_map( 'trim', explode( ',', $tags ) ) ) );
+	}
+
+	aimes_slack_dm_await_image( $user_id, $post_id, $title, 'Article' );
+	exit;
+}
+
+// ---------- Post creator: Talk / Seminar ----------
+function aimes_create_talk_post( $vals, $user_id ) {
+	$title       = trim( $vals['block_title']['title']['value']             ?? '' );
+	$abstract    = trim( $vals['block_abstract']['abstract']['value']       ?? '' );
+	$speaker     = trim( $vals['block_speaker']['speaker']['value']         ?? '' );
+	$speaker_bio = trim( $vals['block_speaker_bio']['speaker_bio']['value'] ?? '' );
+	$date        = $vals['block_date']['date']['selected_date']             ?? '';
+	$time        = $vals['block_time']['time']['selected_time']             ?? '';
+	$location    = trim( $vals['block_location']['location']['value']       ?? '' );
+	$virtual_url = trim( $vals['block_virtual_url']['virtual_url']['value'] ?? '' );
+	$register    = trim( $vals['block_register']['register']['value']       ?? '' );
+
+	if ( ! $title ) {
+		return new WP_REST_Response( array(
+			'response_action' => 'errors',
+			'errors'          => array( 'block_title' => 'Title is required.' ),
+		), 200 );
+	}
+	if ( ! $speaker ) {
+		return new WP_REST_Response( array(
+			'response_action' => 'errors',
+			'errors'          => array( 'block_speaker' => 'Speaker name is required.' ),
+		), 200 );
+	}
+
+	// Build datetime string in Y-m-d\TH:i format (used by talk-preview.php via strtotime)
+	$datetime_str = '';
+	if ( $date && $time ) {
+		$datetime_str = $date . 'T' . $time;
+	} elseif ( $date ) {
+		$datetime_str = $date . 'T00:00';
+	}
+
+	aimes_slack_flush_response();
+
+	$post_id = wp_insert_post( array(
+		'post_title'   => sanitize_text_field( $title ),
+		'post_content' => wp_kses_post( $abstract ),
+		'post_status'  => 'publish',
+		'post_type'    => 'aimes_talk',
+	), true );
+
+	if ( is_wp_error( $post_id ) ) { exit; }
+
+	if ( $datetime_str ) { update_post_meta( $post_id, '_aimes_talk_date',        sanitize_text_field( $datetime_str ) ); }
+	if ( $speaker )      { update_post_meta( $post_id, '_aimes_talk_speaker',     sanitize_text_field( $speaker ) ); }
+	if ( $speaker_bio )  { update_post_meta( $post_id, '_aimes_talk_speaker_bio', sanitize_text_field( $speaker_bio ) ); }
+	if ( $location )     { update_post_meta( $post_id, '_aimes_talk_location',    sanitize_text_field( $location ) ); }
+	if ( $virtual_url )  { update_post_meta( $post_id, '_aimes_talk_virtual_url', esc_url_raw( $virtual_url ) ); }
+	if ( $register )     { update_post_meta( $post_id, '_aimes_talk_register',    esc_url_raw( $register ) ); }
+
+	aimes_slack_dm_await_image( $user_id, $post_id, $title, 'Talk' );
+	exit;
+}
+
+// ---------- Post creator: Announcement ----------
+function aimes_create_announcement_post( $vals, $user_id ) {
+	$text = trim( $vals['block_text']['text']['value'] ?? '' );
+	$link = trim( $vals['block_link']['link']['value'] ?? '' );
+
+	if ( ! $text ) {
+		return new WP_REST_Response( array(
+			'response_action' => 'errors',
+			'errors'          => array( 'block_text' => 'Announcement text is required.' ),
+		), 200 );
+	}
+
+	aimes_slack_flush_response();
+
+	$post_id = wp_insert_post( array(
+		'post_title'  => sanitize_text_field( $text ),
+		'post_status' => 'publish',
+		'post_type'   => 'aimes_announcement',
+	), true );
+
+	if ( is_wp_error( $post_id ) ) { exit; }
+
+	if ( $link ) { update_post_meta( $post_id, '_aimes_announcement_link', esc_url_raw( $link ) ); }
+
+	aimes_slack_dm_confirm( $user_id, $post_id, $text, 'Announcement' );
+	exit;
+}
+
+// ---------- Slack event subscription handler ----------
+// Receives message.im events — used to attach an uploaded image to a pending post
+function aimes_slack_handle_events( WP_REST_Request $request ) {
+	$body = json_decode( $request->get_body(), true );
+	if ( ! $body ) {
+		return new WP_REST_Response( null, 200 );
+	}
+
+	// Slack URL verification — sent once when you first save the Events URL in Slack app settings
+	if ( ( $body['type'] ?? '' ) === 'url_verification' ) {
+		return new WP_REST_Response( array( 'challenge' => $body['challenge'] ), 200 );
+	}
+
+	// Only handle message events in DMs (channel_type = im) that contain files
+	$event = $body['event'] ?? array();
+	if ( ( $event['type'] ?? '' ) !== 'message' )         { return new WP_REST_Response( null, 200 ); }
+	if ( ( $event['channel_type'] ?? '' ) !== 'im' )      { return new WP_REST_Response( null, 200 ); }
+	if ( empty( $event['files'] ) )                       { return new WP_REST_Response( null, 200 ); }
+	if ( isset( $event['bot_id'] ) )                      { return new WP_REST_Response( null, 200 ); }
+	// Allow file_share subtype (that's how file uploads arrive); skip other subtypes
+	$subtype = $event['subtype'] ?? '';
+	if ( $subtype && $subtype !== 'file_share' )          { return new WP_REST_Response( null, 200 ); }
+
+	$slack_user_id = $event['user'] ?? '';
+	if ( ! $slack_user_id )                               { return new WP_REST_Response( null, 200 ); }
+
+	// Check if this user has a pending post waiting for an image
+	$post_id = get_transient( 'aimes_pending_image_' . $slack_user_id );
+	if ( ! $post_id )                                     { return new WP_REST_Response( null, 200 ); }
+
+	// Respond to Slack immediately, do file work after
+	aimes_slack_flush_response();
+
+	// Find first image file in the message
+	$file_url  = '';
+	$file_name = 'image.jpg';
+	foreach ( $event['files'] as $f ) {
+		if ( strpos( $f['mimetype'] ?? '', 'image/' ) === 0 ) {
+			$file_url  = $f['url_private'] ?? '';
+			$file_name = sanitize_file_name( $f['name'] ?? 'image.jpg' );
+			break;
+		}
+	}
+
+	if ( ! $file_url || ! defined( 'AIMES_SLACK_BOT_TOKEN' ) ) {
+		aimes_slack_dm( $slack_user_id, ':x: No image found in your message. Please upload an image file (jpg, png, etc.).' );
+		exit;
+	}
+
+	aimes_slack_dm( $slack_user_id, ':hourglass: Got it! Downloading your image...' );
+
+	// Download the Slack-hosted file using the bot token
+	$dl = wp_remote_get( $file_url, array(
+		'headers' => array( 'Authorization' => 'Bearer ' . AIMES_SLACK_BOT_TOKEN ),
+		'timeout' => 30,
+	) );
+
+	if ( is_wp_error( $dl ) || wp_remote_retrieve_response_code( $dl ) !== 200 ) {
+		aimes_slack_dm( $slack_user_id, ':x: Could not download the image. Try uploading again.' );
+		exit;
+	}
+
+	aimes_slack_dm( $slack_user_id, ':hourglass: Saving to WordPress media library...' );
+
+	// Write to a temp file and sideload into the media library
+	$tmp = wp_tempnam( $file_name );
+	file_put_contents( $tmp, wp_remote_retrieve_body( $dl ) );
+
+	require_once ABSPATH . 'wp-admin/includes/media.php';
+	require_once ABSPATH . 'wp-admin/includes/file.php';
+	require_once ABSPATH . 'wp-admin/includes/image.php';
+	require_once ABSPATH . 'wp-admin/includes/class-wp-filesystem-base.php';
+	require_once ABSPATH . 'wp-admin/includes/class-wp-filesystem-direct.php';
+	WP_Filesystem();
+
+	$attach_id = media_handle_sideload( array( 'name' => $file_name, 'tmp_name' => $tmp ), $post_id );
+	@unlink( $tmp );
+
+	if ( is_wp_error( $attach_id ) ) {
+		aimes_slack_dm( $slack_user_id, ':x: Image downloaded but could not be saved to WordPress: ' . $attach_id->get_error_message() );
+		exit;
+	}
+
+	set_post_thumbnail( $post_id, $attach_id );
+
+	// For talks: also populate _aimes_talk_thumb so talk-preview.php picks it up
+	if ( get_post_type( $post_id ) === 'aimes_talk' ) {
+		update_post_meta( $post_id, '_aimes_talk_thumb', wp_get_attachment_url( $attach_id ) );
+	}
+
+	delete_transient( 'aimes_pending_image_' . $slack_user_id );
+
+	$post_title = get_the_title( $post_id );
+	$edit_url   = admin_url( 'post.php?post=' . $post_id . '&action=edit' );
+	aimes_slack_dm( $slack_user_id, ":white_check_mark: *Featured image set!* Post *{$post_title}* is live with the image.\n<{$edit_url}|View in WP Admin>" );
+
+	exit;
 }
